@@ -1,0 +1,119 @@
+'use strict';
+var AWS = require('aws-sdk');
+var dynamodb = new AWS.DynamoDB.DocumentClient();
+var s3 = new AWS.S3();
+
+exports.handler = function(event, context) {
+
+    var reqs = [];
+    var lave = [];
+    var list = [];
+    var batch_max = 25;
+    var content_data = "";
+    //console.log("Received event:", JSON.stringify(event, null, 2));
+
+    event.Records.forEach(function(_proc) {
+
+        var s3get_params = {
+            Bucket: _proc.s3.bucket.name,
+            Key: _proc.s3.object.key
+        };
+
+        s3.getObject(s3get_params, function(err, data) {
+
+            if (!err) {
+                var list_raw = data.Body.toString().split("\n");
+
+                list_raw.forEach(function(_content){
+                    if (_content.length >1) {
+                        if (list.length < batch_max) {
+                            content_data = JSON.parse(_content);
+                            list.push(content_data);
+
+                            reqs.push({
+                                PutRequest: {
+                                    Item: {
+                                        "userid": content_data.userid,
+                                        "news": content_data.news
+                                }}
+                            });
+                        }
+                        else {
+                            lave.push(_content);
+                        }
+                    }
+                });
+            }
+            else {
+                context.fail("ERROR in S3 " +err);
+            }
+
+            putObj(lave, function(result, err) {
+                if (!err) {
+                    console.log("PUT BODY: " +result);
+                }
+                else {
+                    console.log("PUT ERROR: "+err);
+                }
+            });
+
+            putDynamo(reqs, function(result, err) {
+                if (!err) {
+                    console.log("PUT DDB OK ..." +result);
+                }
+                else {
+                    console.log("PUT DYNAMO ERROR:" +err);
+                }
+            });
+        });
+
+    });
+};
+
+function putObj(laveVal, callback){
+    if (laveVal.length >=1) {
+        var save_br = "\n";
+        var save_body = "";
+
+        laveVal.forEach(function(_value) {
+            if (_value == laveVal[laveVal.length-1]) save_br = "\r";
+            save_body += _value + save_br;
+        });
+
+        var time_num = Date.now();
+        var save_key = 'json/' + time_num + '._PROC';
+        var s3put_params = {
+            Bucket: 'jcrecommand',
+            Key: save_key,
+            Body: save_body
+        };
+
+        s3.putObject(s3put_params, function(err, data) {
+            if (!err) {
+                console.log("Success save " +save_body.length);
+                callback(save_body.length);
+            }
+            else {
+                console.log("S3 put ERROR: " +err);
+            }
+        });
+    }
+}
+
+function putDynamo(items, callback) {
+
+    if (items.length >=1) {
+        var mul_params = { RequestItems: {
+            "recommand": items
+        }};
+        dynamodb.batchWrite(mul_params, function(err) {
+            if (!err) {
+                console.log('BatchWrite OK...' +items.length);
+                callback(items.length);
+            }
+            else {
+                console.log("BatchWrite ERROR: " +err);
+            }
+        });
+    }
+}

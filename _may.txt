@@ -1,0 +1,67 @@
+'use strict';
+var AWS = require('aws-sdk');
+var s3 = new AWS.S3();
+
+exports.handler = function(event, context) {
+
+    console.log("Received event:", JSON.stringify(event, null, 2));
+    var objs = [];
+    var obj_body = [];
+    var s3get_params = {};
+    var s3list_params = {
+        Bucket: "jcrecommand",
+        Prefix: "json/"
+    };
+
+    // list part-json file from S3.
+    s3.listObjects(s3list_params, function(err, data) {
+        data.Contents.forEach(function(content) {
+            if (content.Key.match(/^(json\/part-r-)/g)) {
+                console.log("FOUND " + content.Key);
+                objs.push(content.Key);
+            }
+        });
+        objs.forEach(function(_obj) {
+            s3get_params = {
+                Bucket: "jcrecommand", Key: _obj
+            };
+            s3.getObject(s3get_params, function(err, data) {
+                if (!err) {
+                    obj_body.push(data.Body.toString());
+                    if (objs.length == obj_body.length ) {
+                        putObj(obj_body, function(result) {
+                            console.log("Success save _PROC ".result);
+                        });
+                    }
+                }
+                else {
+                    console.log("GET OBJECT FAIL: "+err);
+                }
+            });
+        });
+    });
+};
+
+function putObj(obj_body, callback) {
+
+    var all_body = "";
+    obj_body.forEach(function(_body) {
+        all_body += _body;
+        console.log("OBJ BODY: " +_body.length);
+    });
+    var time_num = Date.now();
+    var s3put_params = {
+        Bucket: 'jcrecommand',
+        Key: 'json/' + time_num +'._PROC',
+        Body: all_body
+    };
+
+    s3.putObject(s3put_params, function(err, data) {
+        if (!err) {
+            callback(all_body.length);
+        }
+        else {
+            console.log("Fail to processed.");
+        }
+    });
+}

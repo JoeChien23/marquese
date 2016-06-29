@@ -1,0 +1,30 @@
+<?php
+
+require '/usr/local/src/vendor/autoload.php';
+ini_set('date.timezone','Asia/Taipei');
+
+use Aws\OpsWorks\OpsWorksClient;
+
+$client = OpsWorksClient::factory(array(
+    'profile' => 'default',
+    'region'  => 'us-east-1'
+//    'region'  => 'ap-northeast-1'
+));
+
+
+$instanceID = 'i-40564659';
+$instanceID = '24d5e76a-37c7-4b08-aeda-42091eb22ff2';
+$cmd = 'stop';
+
+if($cmd == 'start'){
+  $result = $client->startInstance( array(
+    'InstanceId' => $instanceID,
+  ));
+}
+elseif($cmd == 'stop'){
+  $result = $client->stopInstance( array(
+    'InstanceId' => $instanceID,
+  ));
+}
+
+print_r($result);
